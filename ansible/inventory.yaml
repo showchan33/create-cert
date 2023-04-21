@@ -1,0 +1,31 @@
+all:
+  vars:
+    use_ca: false
+    ca:
+      days: 36500
+      passphrase: capass
+      country: JP
+      state_province: Tokyo
+      locality: Chiyoda
+      organization: mycompany
+      organization_unit: myunit
+      common_name: myca.local
+      email_address: mycertauth@localhogehogeadf.com
+      challenge_password: ""
+      optional_company_name: ""
+    outdir: /volume/ssl
+    private_key:
+      name: privatekey.pem
+      size: 2048
+      algorithm: RSA
+      passphrase: sslpass
+      file: pswd
+    csr:
+      country: JP
+      state_province: Tokyo
+      organization: mycompany
+      common_name: myservice.local
+      name: server.csr
+    cert:
+      days: 365
+      name: server.pem

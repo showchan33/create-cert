@@ -1,0 +1,42 @@
+- name: nginx-ssl
+  hosts: localhost
+  connection: local
+  tasks:
+
+  # CA局作成時の参考サイト
+  # https://blog.apar.jp/linux/8587/
+  # http://racchai.hatenablog.com/entry/2016/04/25/070000#CA%E3%82%92%E4%BD%9C%E3%82%8B
+
+  - name: OpenSSL の設定をプライベート認証局構築用に変更(basicConstraintsをTRUEに)
+    replace:
+      path: /etc/ssl/openssl.cnf
+      after: '\[ v3_req \]'
+      before: '\[ usr_cert \]'
+      regexp: "^basicConstraints=CA:.*"
+      replace: "basicConstraints=CA:TRUE"
+      backup: yes
+
+  - name: OpenSSL の設定をプライベート認証局構築用に変更(nsCertTypeのコメントアウトを外す)
+    lineinfile:
+      path: /etc/ssl/openssl.cnf
+      regexp: '^# nsCertType = sslCA, emailCA$'
+      line: 'nsCertType = sslCA, emailCA'
+
+  - name: シリアルファイルのディレクトリを作成
+    file:
+      path: /etc/ssl/CA
+      state: directory
+
+  - name: シリアルファイルを作成
+    file:
+      path: /etc/ssl/CA/serial
+      state: touch
+
+  - name: 行を追加
+    lineinfile:
+      path: /etc/ssl/CA/serial
+      line: "00"
+
+  - name: pexpectをpipインストール
+    pip:
+      name: pexpect

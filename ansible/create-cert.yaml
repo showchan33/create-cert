@@ -1,0 +1,122 @@
+- name: nginx-ssl
+  hosts: localhost
+  connection: local
+  tasks:
+
+  - name: CA局を使うかどうかの設定
+    set_fact:
+      use_ca: "{{ lookup('env', 'USE_CA') }}"
+    when:
+      - lookup('env', 'USE_CA') != ""
+
+  - name: 変数の設定(CA局利用時のみ)
+    set_fact:
+      ca:
+        days: "{{ lookup('env', 'CA_DAYS') | default(ca.days, true) }}"
+        passphrase: "{{ lookup('env', 'CA_PASSPHRASE') | default(ca.passphrase, true) }}"
+        country: "{{ lookup('env', 'CA_COUNTRY') | default(ca.country, true) }}"
+        state_province: "{{ lookup('env', 'CA_STATE_PROVINCE') | default(ca.state_province, true) }}"
+        locality: "{{ lookup('env', 'CA_LOCALITY') | default(ca.locality, true) }}"
+        organization: "{{ lookup('env', 'CA_ORGANIZATION') | default(ca.organization, true) }}"
+        organization_unit: "{{ lookup('env', 'CA_ORGANIZATION_UNIT') | default(ca.organization_unit, true) }}"
+        common_name: "{{ lookup('env', 'CA_COMMON_NAME') | default(ca.common_name, true) }}"
+        email_address: "{{ lookup('env', 'CA_EMAIL_ADDRESS') | default(ca.email_address, true) }}"
+        challenge_password: "{{ lookup('env', 'CA_CHALLENGE_PASSWORD') | default(ca.challenge_password, true) }}"
+        optional_company_name: "{{ lookup('env', 'CA_OPTIONAL_COMPANY_NAME') | default(ca.optional_company_name, true) }}"
+    when: use_ca
+
+  - name: 変数の設定(共通)
+    set_fact:
+      private_key:
+        size: "{{ lookup('env', 'PRIVATE_KEY_SIZE') | default(private_key.size, true) | int }}"
+        passphrase: "{{ lookup('env', 'PRIVATE_KEY_PASSPHRASE') | default(private_key.passphrase, true) }}"
+        algorithm: "{{ lookup('env', 'PRIVATE_KEY_ALGORITHM') | default(private_key.algorithm, true) }}"
+      csr:
+        country: "{{ lookup('env', 'CSR_COUNTRY') | default(csr.country, true) }}"
+        state_province: "{{ lookup('env', 'CSR_STATE_PROVINCE') | default(csr.state_province, true) }}"
+        organization: "{{ lookup('env', 'CSR_ORGANIZATION') | default(csr.organization, true) }}"
+        common_name: "{{ lookup('env', 'CSR_COMMON_NAME') | default(csr.common_name, true) }}"
+      cert:
+        days: "{{ lookup('env', 'CERT_DAYS') | default(cert.days, true) }}"
+
+  - name: 証明書の有効期限を変更
+    lineinfile:
+      path: /usr/lib/ssl/misc/CA.pl
+      regexp: '^my \$CADAYS = "-days .*";'
+      line: 'my $CADAYS = "-days {{ ca.days }}";'
+    when: use_ca
+
+  - name: CA局の作成
+    expect:
+      command: /usr/lib/ssl/misc/CA.pl -newca
+      echo: yes
+      timeout: 5
+      responses:
+        "CA certificate filename.*": ""
+        "Enter PEM pass phrase.*": "{{ ca.passphrase }}"
+        "Enter PEM pass phrase.*": "{{ ca.passphrase }}"
+        "Country Name.*":  "{{ ca.country }}"
+        "State or Province Name.*":  "{{ ca.state_province }}"
+        "Locality Name.*":  "{{ ca.locality }}"
+        "Organization Name.*":  "{{ ca.organization }}"
+        "Organizational Unit Name.*":  "{{ ca.organization_unit }}"
+        "Common Name.*":  "{{ ca.common_name }}"
+        "Email Address.*":  "{{ ca.email_address }}"
+        "A challenge password.*":  "{{ ca.challenge_password }}"
+        "An optional company name.*":  "{{ ca.optional_company_name }}"
+        "Enter pass phrase for.*":  "{{ ca.passphrase }}"
+    when: use_ca
+
+  - name: 鍵および証明書の作成
+    block:
+
+    - name: SSL関連ファイルを格納するディレクトリを作成
+      file:
+        path: "{{ outdir }}"
+        state: directory
+
+    - name: 秘密鍵の作成
+      openssl_privatekey:
+        path: "{{ outdir }}/{{ private_key.name }}"
+        size: "{{ private_key.size }}"
+        passphrase: "{{ private_key.passphrase }}"
+        type: "{{ private_key.algorithm }}"
+        cipher: auto
+      
+    - name: CSRの生成
+      openssl_csr:
+        path: "{{ outdir }}/{{ csr.name }}"
+        privatekey_path: "{{ outdir }}/{{ private_key.name }}"
+        privatekey_passphrase: "{{ private_key.passphrase }}"
+        common_name: "{{ csr.common_name }}"
+        country_name: "{{ csr.country }}"
+        state_or_province_name: "{{ csr.state_province }}"
+        organization_name: "{{ csr.organization }}"
+
+    - name: オレオレ証明書の作成
+      shell: >-
+        openssl x509 -req
+        -in {{ outdir }}/{{ csr.name }}
+        -signkey {{ outdir }}/{{ private_key.name }}
+        -out {{ outdir }}/{{ cert.name }}
+        -days {{ cert.days }}
+        -passin pass:{{ private_key.passphrase }}
+      when: not use_ca
+
+    - name: 証明書の作成(自作CA局を利用)
+      expect:
+        command: >-
+          openssl ca
+          -out {{ outdir }}/{{ cert.name }}
+          -in {{ outdir }}/{{ csr.name }}
+          -days {{ cert.days }}
+        echo: yes
+        timeout: 5
+        responses:
+          "Enter pass phrase for.*": "{{ ca.passphrase }}"
+          "Sign the certificate.*": y
+          "1 out of 1 certificate requests certified, commit.*": y
+      when: use_ca
+
+  - name: パスワードファイルの作成
+    shell: echo {{ private_key.passphrase }} > {{ outdir }}/{{ private_key.file }}
