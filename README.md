@@ -76,5 +76,5 @@ openssl x509 -text -noout -in /path/to/output/ssl/server.pem
 ```
 
 # License
-"ceph-osd-restarter" is under [GPL license](https://www.gnu.org/licenses/licenses.en.html).
+"create-cert" is under [GPL license](https://www.gnu.org/licenses/licenses.en.html).
  
