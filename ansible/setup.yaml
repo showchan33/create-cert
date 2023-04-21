@@ -1,4 +1,4 @@
-- name: nginx-ssl
+- name: setup
   hosts: localhost
   connection: local
   tasks:

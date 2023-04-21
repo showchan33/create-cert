@@ -1,4 +1,4 @@
-- name: nginx-ssl
+- name: create-cert
   hosts: localhost
   connection: local
   tasks:
